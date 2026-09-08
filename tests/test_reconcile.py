@@ -53,6 +53,32 @@ def test_unexplained_change_is_flagged_not_applied():
     assert len(store.entities["marcus"].exceptions) == 0
 
 
+def test_repeated_unexplained_value_gets_promoted():
+    store = _store_with_marcus()
+    # First unexplained observation: recorded, not promoted (below threshold).
+    report1 = reconcile(
+        store, "marcus", {"voice": "soft/high"}, ClipRef("ep4", "..."),
+        narrative_context="Marcus talks to Sarah at the docks again.",
+        reasoner=REASONER,
+    )
+    assert report1[0]["status"] == "UNEXPLAINED_DRIFT"
+    assert store.entities["marcus"].canonical["voice"].value == "deep/rough"
+
+    # Second consecutive matching unexplained observation: promoted.
+    report2 = reconcile(
+        store, "marcus", {"voice": "soft/high"}, ClipRef("ep5", "..."),
+        narrative_context="Marcus talks to Sarah at the docks again.",
+        reasoner=REASONER,
+    )
+    assert report2[0]["status"] == "PROMOTED"
+    assert store.entities["marcus"].canonical["voice"].value == "soft/high"
+    # the old value is archived, not lost
+    archived = [d for d in store.entities["marcus"].exceptions
+                if d.classification == "PROMOTED_FROM_PREVIOUS"]
+    assert len(archived) == 1
+    assert archived[0].canonical_value == "deep/rough"
+
+
 def test_dynamic_attribute_skips_reconciliation():
     store = _store_with_marcus()
     store.entities["marcus"].dynamic_attributes.add("outfit")
