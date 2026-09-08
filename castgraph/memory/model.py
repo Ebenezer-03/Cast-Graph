@@ -131,7 +131,13 @@ class MemoryStore:
         # reconstruction, without requiring callers to track it themselves.
         self.clip_sequence: list[str] = []
 
-    def _note_clip(self, clip_id: str) -> None:
+    def note_clip(self, clip_id: str) -> None:
+        """Public: register a clip in processing order, whether or not it
+        changed anything. Made public (was `_note_clip`) after a live
+        production test found `reconcile()`'s CONSISTENT branch never
+        registered a clip at all -- a clip with only matching attributes
+        was silently missing from `clip_sequence`, breaking Phase 6
+        temporal reconstruction for it. See castgraph/drift/reconcile.py."""
         if clip_id not in self.clip_sequence:
             self.clip_sequence.append(clip_id)
 
@@ -144,7 +150,7 @@ class MemoryStore:
         """First-time recording of a canonical attribute, or reinforcement of
         an existing one with matching evidence. Only called for attributes
         not in `dynamic_attributes` — see reconcile()."""
-        self._note_clip(clip_ref.clip_id)
+        self.note_clip(clip_ref.clip_id)
         entity = self.entities[entity_id]
         if attribute in entity.canonical:
             entity.canonical[attribute].evidence.append(clip_ref)
@@ -159,7 +165,7 @@ class MemoryStore:
         PROMOTED_FROM_PREVIOUS, then makes new_value canonical. See
         docs/phases/PHASE_05.md subtask 11 -- promotion threshold/policy
         lives in castgraph/drift/reconcile.py, not here."""
-        self._note_clip(clip_ref.clip_id)
+        self.note_clip(clip_ref.clip_id)
         entity = self.entities[entity_id]
         old = entity.canonical.get(attribute)
         if old is not None:
@@ -176,11 +182,11 @@ class MemoryStore:
         )
 
     def record_exception(self, entity_id: str, deviation: Deviation) -> None:
-        self._note_clip(deviation.clip_ref.clip_id)
+        self.note_clip(deviation.clip_ref.clip_id)
         self.entities[entity_id].exceptions.append(deviation)
 
     def record_unexplained(self, entity_id: str, deviation: Deviation) -> None:
-        self._note_clip(deviation.clip_ref.clip_id)
+        self.note_clip(deviation.clip_ref.clip_id)
         self.entities[entity_id].unexplained.append(deviation)
 
     def record_event(self, event: Event) -> None:
