@@ -28,6 +28,12 @@ def reconcile(
     """Returns a per-attribute verification report: one entry per observed
     attribute with its status, so weaknesses aren't hidden behind one
     aggregate score (Phase 10)."""
+    # Register this clip regardless of outcome -- a real, live production
+    # test found that a clip whose only outcome was CONSISTENT never got
+    # registered in clip_sequence otherwise (every other branch calls a
+    # MemoryStore method that happens to register it as a side effect;
+    # CONSISTENT was the one branch that mutates canonical state directly).
+    store.note_clip(clip_ref.clip_id)
     entity = store.entities[entity_id]
     report: list[dict] = []
 
