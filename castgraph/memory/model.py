@@ -33,6 +33,9 @@ class CanonicalAttribute:
     # a real confidence percentage until it's backed by real observation
     # noise data.
     confidence: float = 0.5
+    # Count of evidence entries removed by compression (Phase 12) -- kept
+    # visible rather than silently lost, per Principle 1/13.
+    evidence_dropped: int = 0
 
     def reinforce(self, step: float = 0.1) -> None:
         self.confidence = min(1.0, self.confidence + step)
