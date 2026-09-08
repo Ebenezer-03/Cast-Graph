@@ -93,6 +93,10 @@ class Entity:
     id: str
     name: str
     entity_type: str = "character"  # "character" | "location" | "object"
+    # Manually-curated alternate names ("he", "the doctor", nicknames) that
+    # should resolve to this entity. Intentionally not auto-inferred — see
+    # docs/phases/PHASE_04.md risk note on overly broad aliases.
+    aliases: set[str] = field(default_factory=set)
     canonical: dict[str, CanonicalAttribute] = field(default_factory=dict)
     exceptions: list[Deviation] = field(default_factory=list)
     unexplained: list[Deviation] = field(default_factory=list)
