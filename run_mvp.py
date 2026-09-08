@@ -13,6 +13,7 @@ GatewayReasoner once a real AI_GATEWAY_API_KEY/ANTHROPIC_API_KEY exists.
 from __future__ import annotations
 
 from castgraph.adapters import build_context_data, render_text
+from castgraph.consistency import consistency_report
 from castgraph.drift import reconcile
 from castgraph.identity import resolve_identity
 from castgraph.memory import MemoryStore
@@ -36,6 +37,7 @@ def run() -> None:
     print(f"Identity resolution: {CHARACTER} -> {entity_id} "
           f"(method={identity.method}, confidence={identity.confidence})")
     name_to_id = {CHARACTER: entity_id}
+    history: list[list[dict]] = []
 
     for clip in CLIPS:
         hr(f"CLIP {clip['id']}")
@@ -66,6 +68,7 @@ def run() -> None:
         print("\nVerification report:")
         for item in report:
             print(f"  [{item['status']}] {item['attribute']}: {item['detail']}")
+        history.append(report)
 
     hr("FINAL MEMORY STATE")
     print(store.to_json())
@@ -75,6 +78,12 @@ def run() -> None:
 
     hr("RETRIEVAL COMPARISON (scenario-specific, see PHASE_08.md before generalizing)")
     print(compare_retrieval_strategies(store, [entity_id]))
+
+    hr("CONSISTENCY REPORT (per-attribute; aggregate is a naive mean, see below)")
+    report_summary = consistency_report(history)
+    for attr, stats in report_summary["per_attribute"].items():
+        print(f"  {attr}: {stats['rate']:.2f} consistent ({stats['checked']} checked)")
+    print(f"  aggregate: {report_summary['aggregate']} -- {report_summary['aggregate_caveat']}")
 
     hr("UNEXPLAINED DRIFT REQUIRING REVIEW")
     entity = store.entities[entity_id]
