@@ -29,30 +29,55 @@ to validate against) and was explicitly not faked.
 | 11. Drift Attribution | [PHASE_11](docs/phases/PHASE_11.md) | yes | all 6 classifications now reachable, incl. AMBIGUOUS |
 | 12. Consolidation & Compression | [PHASE_12](docs/phases/PHASE_12.md) | yes | evidence-capping + budget enforcement, tested |
 | 13. Provenance & Auditability | [PHASE_13](docs/phases/PHASE_13.md) | yes | plain-language `explain()` audit function |
-| 14. Production Architecture | [PHASE_14](docs/phases/PHASE_14.md) | design only | no product/workload exists — building it would be speculative |
+| 14. Production Architecture | [PHASE_14](docs/phases/PHASE_14.md) | **yes, real** | see "Real deployment" below — most of the design doc's speculative caveats are now overtaken by an actual deployment |
 | 15. Benchmarking & Validation | [PHASE_15](docs/phases/PHASE_15.md) | yes, narrow | real 28-clip synthetic benchmark + baselines + one ablation, run and checked in |
 
 See [FINAL_SUMMARY.md](FINAL_SUMMARY.md) for the consolidated architecture,
 findings, and honest limitations across all 15 phases.
 
-## Correction from the original plan (still in effect)
+## Real deployment (supersedes the "correction" below for what it covers)
 
-The plan called for real LLM calls via the Vercel AI Gateway. No gateway/API
-key turned out to be available in this environment (an earlier check
-reporting one was present was a shell-quoting bug). The reasoning steps
-(prompt understanding, observation extraction, drift classification) are
-stubbed deterministically (`StubReasoner`) — see
-`decisions/0002-stub-llm-reasoning-for-now.md`. **Every result in this
-project, including the Phase 15 benchmark, tests the memory/reconciliation
-architecture's plumbing, not whether the reasoning steps generalize to real,
-varied language.** Swapping in `GatewayReasoner` (already written) once a
-real key exists is a one-line change in each call site.
+After the phases above were completed, the user asked for a real,
+production-grade end-to-end test. This actually happened:
+
+- **Real LLM**: `GeminiReasoner` (`castgraph/reasoning.py`) calls Google
+  Gemini directly — decision 0003 explains why Gemini rather than the
+  originally-planned Vercel AI Gateway (both Vercel's and Neon's AI
+  Gateways require billing info on file; a free Gemini key does not).
+  This is the first reasoner in the project ever exercised against a real
+  LLM, and it surfaced a real gap Phase 3 had predicted: raw LLM output
+  needs normalized-categorical prompting to match canonical string values
+  at all (see decision 0003 and `castgraph/reasoning.py`).
+- **Real database**: Neon Postgres via the Vercel Marketplace
+  (`castgraph/memory/postgres_store.py`), replacing the local-JSON-file
+  approach for anything beyond `run_mvp.py`'s own demo run. Required
+  adding `MemoryStore.from_dict`/`from_json` — a real, previously-hidden
+  gap (serialization was write-only until this).
+- **Real deployment**: a live Vercel Python function at
+  `https://cast-graph.vercel.app` (`api/generate.py`), backed by the real
+  Postgres instance, using `GeminiReasoner` when `GEMINI_API_KEY` is set.
+  Verified with a real HTTP request against the live URL: real Gemini
+  reasoning, real Postgres persistence, confirmed by reading the row back
+  directly from the database.
+- **Real, honest limitation hit in the process** (decision 0004): the free
+  Gemini key shares quota with the rest of its Google Cloud project and
+  was exhausted mid-testing. The system's response to that was itself a
+  real, useful proof: the retry logic genuinely retried for ~215s against
+  the server's real suggested delay, then returned a clean `500` with the
+  actual upstream error — no hang, no crash, and (verified directly) no
+  partial/corrupted write to Postgres, because `save_store()` only runs
+  after a clip fully succeeds.
+- `GatewayReasoner` (Vercel AI Gateway) remains written but unexercised —
+  no card was added to Vercel/Neon this session (the user chose the free
+  Gemini path instead when asked directly).
 
 ## What's still genuinely open (not busywork — real next steps)
 
-1. Get a real `AI_GATEWAY_API_KEY`/`ANTHROPIC_API_KEY` working and exercise
-   `GatewayReasoner` — this is the single highest-value next step; almost
-   nothing about classification quality is validated until this happens.
+1. A dedicated (not shared/reused) Gemini key, or a paid Vercel/Neon AI
+   Gateway credential, to get past the free-tier quota constraint (decision
+   0004) and run a full multi-request real-LLM consistency+drift test
+   against the live deployment (only partially done this session — one
+   successful request, one quota-exhausted request, both informative).
 2. A real face/voice identity model — the project's biggest capability gap
    relative to its own motivating example (a face changing while the name
    stays the same is currently undetectable).
@@ -65,5 +90,6 @@ real key exists is a one-line change in each call site.
    built so far is designed to plug in behind `castgraph/adapters/` and
    `castgraph/observation/` without changing the memory/drift/retrieval
    core.
-6. Production architecture (Phase 14) — deferred indefinitely, revisit only
-   if a real product/workload materializes.
+6. The rest of Phase 14's design surface (auth, multi-tenant isolation,
+   job queues, observability) — still genuinely deferred; one endpoint
+   with no auth is a real deployment, not a finished product.
