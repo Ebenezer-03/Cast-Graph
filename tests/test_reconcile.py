@@ -53,6 +53,18 @@ def test_unexplained_change_is_flagged_not_applied():
     assert len(store.entities["marcus"].exceptions) == 0
 
 
+def test_conflicting_cues_are_classified_ambiguous():
+    store = _store_with_marcus()
+    report = reconcile(
+        store, "marcus", {"voice": "soft/high"}, ClipRef("ep6", "..."),
+        narrative_context="Marcus, recovering from an injury, is also disguising his voice.",
+        reasoner=REASONER,
+    )
+    assert report[0]["status"] == "AMBIGUOUS"
+    assert store.entities["marcus"].canonical["voice"].value == "deep/rough"
+    assert len(store.entities["marcus"].unexplained) == 1
+
+
 def test_repeated_unexplained_value_gets_promoted():
     store = _store_with_marcus()
     # First unexplained observation: recorded, not promoted (below threshold).
