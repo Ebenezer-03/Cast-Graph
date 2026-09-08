@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from castgraph.llm import gateway
+from castgraph.prompt import extract_transformation_cues
 
 
 class Reasoner(Protocol):
@@ -66,9 +67,6 @@ class StubReasoner:
     — see decisions/0002 for why this must not be read as evidence the
     approach generalizes."""
 
-    DISGUISE_KEYWORDS = ("disguise", "disguising", "undercover", "in hiding")
-    INJURY_KEYWORDS = ("injured", "injury", "recovering", "hospital")
-
     def extract_observation(self, clip_text: str, character_name: str) -> dict:
         text = clip_text.lower()
         obs: dict = {}
@@ -89,8 +87,8 @@ class StubReasoner:
 
     def classify_drift(self, attribute: str, canonical_value: str, observed_value: str,
                         narrative_context: str) -> dict:
-        ctx = narrative_context.lower()
-        if any(k in ctx for k in self.DISGUISE_KEYWORDS):
+        cues = extract_transformation_cues(narrative_context)
+        if "disguise" in cues:
             return {
                 "classification": "TEMPORARY_OVERRIDE",
                 "reasoning": (
@@ -99,7 +97,7 @@ class StubReasoner:
                     f"Treated as an intentional, temporary deviation."
                 ),
             }
-        if any(k in ctx for k in self.INJURY_KEYWORDS):
+        if "injury" in cues:
             return {
                 "classification": "EXPLAINED_TRANSITION",
                 "reasoning": (
