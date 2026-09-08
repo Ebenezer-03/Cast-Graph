@@ -24,6 +24,14 @@ Response, JSON:
       "memory_size_bytes": ...,
       "reasoner": "GeminiReasoner" | "StubReasoner"
     }
+
+Optional request field "force_stub": true forces StubReasoner regardless
+of GEMINI_API_KEY -- a test-only escape hatch (see
+decisions/0005-force-stub-override-for-testing.md) added specifically to
+let the real deployment/Postgres/HTTP path be exercised end to end while
+the shared Gemini free-tier quota (decision 0004) is exhausted. It does
+NOT bypass GEMINI_API_KEY-gated behavior in any way that matters for real
+usage -- normal requests are unaffected unless they explicitly opt in.
 """
 from __future__ import annotations
 
@@ -38,7 +46,9 @@ from castgraph.pipeline import run_clip
 from castgraph.reasoning import GeminiReasoner, StubReasoner
 
 
-def _reasoner():
+def _reasoner(force_stub: bool = False):
+    if force_stub:
+        return StubReasoner()
     return GeminiReasoner() if os.environ.get("GEMINI_API_KEY") else StubReasoner()
 
 
@@ -56,6 +66,7 @@ class handler(BaseHTTPRequestHandler):
             clip_id = body["clip_id"]
             prompt = body["prompt"]
             clip_text = body["clip_text"]
+            force_stub = bool(body.get("force_stub", False))
         except (KeyError, json.JSONDecodeError) as exc:
             self._respond(400, {"error": f"invalid request body: {exc}"})
             return
@@ -66,7 +77,7 @@ class handler(BaseHTTPRequestHandler):
             self._respond(500, {"error": "DATABASE_URL is not configured"})
             return
 
-        reasoner = _reasoner()
+        reasoner = _reasoner(force_stub)
 
         conn = psycopg.connect(database_url)
         try:
