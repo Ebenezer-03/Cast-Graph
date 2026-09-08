@@ -9,11 +9,19 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 import requests
 
 DEFAULT_MODEL = "gemini-3.6-flash"
 API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+# Free-tier Gemini returns 503 UNAVAILABLE under load reasonably often --
+# a real production failure mode observed while testing this client, not a
+# hypothetical. Retry with backoff on the transient status codes only.
+_RETRYABLE_STATUS = {429, 503}
+_MAX_RETRIES = 3
+_BACKOFF_SECONDS = 2
 
 
 class GeminiError(RuntimeError):
@@ -35,14 +43,22 @@ def complete(prompt: str, *, system: str | None = None, model: str = DEFAULT_MOD
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}
 
-    resp = requests.post(
-        f"{API_BASE}/{model}:generateContent",
-        params={"key": _api_key()},
-        json=body,
-        timeout=60,
-    )
-    if resp.status_code != 200:
-        raise GeminiError(f"gemini request failed ({resp.status_code}): {resp.text[:500]}")
+    last_error = None
+    for attempt in range(_MAX_RETRIES + 1):
+        resp = requests.post(
+            f"{API_BASE}/{model}:generateContent",
+            params={"key": _api_key()},
+            json=body,
+            timeout=60,
+        )
+        if resp.status_code == 200:
+            break
+        last_error = GeminiError(f"gemini request failed ({resp.status_code}): {resp.text[:500]}")
+        if resp.status_code not in _RETRYABLE_STATUS or attempt == _MAX_RETRIES:
+            raise last_error
+        time.sleep(_BACKOFF_SECONDS * (2 ** attempt))
+    else:
+        raise last_error  # pragma: no cover -- loop always breaks or raises above
 
     data = resp.json()
     try:
