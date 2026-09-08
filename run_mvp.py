@@ -19,6 +19,7 @@ from castgraph.identity import resolve_identity
 from castgraph.memory import MemoryStore
 from castgraph.observation import observe
 from castgraph.prompt import extract_location
+from castgraph.provenance import explain
 from castgraph.reasoning import StubReasoner
 from castgraph.retrieval import retrieve, compare_retrieval_strategies
 from scenario.marcus_sarah import CHARACTER, CLIPS
@@ -84,6 +85,9 @@ def run() -> None:
     for attr, stats in report_summary["per_attribute"].items():
         print(f"  {attr}: {stats['rate']:.2f} consistent ({stats['checked']} checked)")
     print(f"  aggregate: {report_summary['aggregate']} -- {report_summary['aggregate_caveat']}")
+
+    hr("PROVENANCE / AUDIT: why is 'voice' what it is")
+    print(explain(store, entity_id, "voice"))
 
     hr("UNEXPLAINED DRIFT REQUIRING REVIEW")
     entity = store.entities[entity_id]
