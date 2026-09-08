@@ -13,7 +13,7 @@ prerequisites, it is built and run for real.
 ## What is genuinely run this phase, and what is not
 
 **Run for real** (small, synthetic, mechanism-level — see caveats below):
-- A long-horizon synthetic scenario (`eval/drift_benchmark.py`): 30 clips
+- A long-horizon synthetic scenario (`eval/drift_benchmark.py`): 28 clips
   for one character mixing consistent observations, two categories of
   legitimate change (disguise, injury — the only two `StubReasoner` can
   recognize), one-off unexplained drift, and a sustained run that should
@@ -39,13 +39,13 @@ reason each requires):
   comparison.
 - The full memory-budget matrix (10KB-10MB) — Phase 12 built the mechanism
   (`enforce_budget`) and tested it works; running it as a matrix against a
-  30-clip single-character benchmark would produce numbers with no
+  28-clip single-character benchmark would produce numbers with no
   informative variance (this scenario never approaches even the 10KB
   budget).
 - The 500-generation long-horizon point, ablations 8/9 (embedding-only,
   structured-only memory) — no embedding memory variant exists to compare
   against (Principle 3 — never built one, nothing to ablate).
-- Statistical validation (significance testing) — one 30-clip run has no
+- Statistical validation (significance testing) — one 28-clip run has no
   variance/repetition to test significance over; would be theater.
 - Novelty/literature validation beyond Phase 1's single search pass.
 
@@ -53,7 +53,7 @@ reason each requires):
 
 ### 1. Benchmark dataset design
 
-`eval/drift_benchmark.py`: 30 synthetic clips, each labeled with an
+`eval/drift_benchmark.py`: 28 synthetic clips, each labeled with an
 **expected classification category** (independent of `StubReasoner`'s
 internals — labels reflect the brief's own drift-benchmark categories:
 `consistent`, `legitimate_disguise`, `legitimate_injury`,
@@ -77,7 +77,7 @@ Not available — no generator integration exists.
 
 ### 4. Long-horizon experiments
 
-30 clips run in sequence is the long-horizon test that's actually
+28 clips run in sequence is the long-horizon test that's actually
 buildable; not the 100/250/500-clip points from the brief (would take
 proportionally more hand-authored/label-verified synthetic data with no
 added insight at this project's current stage — diminishing signal for
@@ -115,8 +115,43 @@ unexercised (decision 0002). Nothing honest to measure yet.
 
 ### 10. Failure analysis
 
-Reported directly from the benchmark run: which categories Baseline F
-mis-classified or missed, listed below, not glossed over.
+Reported directly from the actual benchmark run (`eval/results/benchmark_report.json`),
+not glossed over:
+
+- **Baseline F (promotion enabled) status accuracy: 0.93 (26/28)**, drift-
+  detection precision 0.67, recall 1.0. **Real, unplanned finding**: the
+  two "mistakes" are both benchmark-authoring artifacts, not reconciliation
+  bugs — after `unexplained_drift_sustained` triggers a promotion (Phase 5),
+  canonical truth genuinely changes to the new value; the next two
+  "consistent" clips in the hand-authored sequence were written assuming
+  the *original* value stays canonical forever, so they get (correctly,
+  relative to the *new* canonical value) flagged as drift. This is exactly
+  the kind of subtlety the brief warns about: **once memory is allowed to
+  update, "consistent" must be judged against current canonical truth, not
+  the value the benchmark author had in mind when writing the clip.** Left
+  in rather than quietly rewritten, because it's a genuinely instructive
+  result about how promotion changes what "correct" even means downstream,
+  not a defect to hide.
+- **Ablation (promotion disabled) status accuracy: 1.00 (28/28)**, drift
+  detection precision 1.0, recall 1.0 — every deviation classified exactly
+  as labeled, because with promotion off, canonical truth never moves, so
+  the "consistent" clips' assumption (that the original value stays
+  canonical) holds throughout. **This makes the ablation look strictly
+  better than the full system on this specific benchmark** — a direct
+  illustration of RQ6-adjacent tension: promotion (a feature meant to let
+  memory update to a genuine sustained change) actively hurts a
+  benchmark's measured accuracy the moment the benchmark's own labels don't
+  account for that update. Not a reason to remove promotion (a system that
+  can never update canonical truth has its own, worse failure mode: the
+  `PROMOTION_THRESHOLD` rationale in `docs/phases/PHASE_05.md` still holds)
+  — but a concrete demonstration that **evaluation harnesses for a
+  self-updating memory system need labels that also account for legitimate
+  updates, which this one, as authored, did not.** Recorded as a
+  to-fix-next-time item, not corrected retroactively by relabeling after
+  seeing the result.
+- **Baseline A: 0 flags, by construction.** Not a finding so much as the
+  expected floor — included to make the contrast with Baseline F/ablation
+  visible in one report rather than asserted only in prose.
 
 ### 11. Statistical validation
 
@@ -131,13 +166,14 @@ keyword matcher, not validated against real ambiguous language.
 
 ## Running the benchmark
 
-`python eval/run_benchmark.py` runs both baselines against
+`python -m eval.run_benchmark` (run as a module, from the repo root, so
+`eval`'s package-relative imports resolve) runs both baselines against
 `eval/drift_benchmark.py` and writes a report to stdout (and, so results
 aren't just terminal scrollback, `eval/results/benchmark_report.json`).
 
 ## Architecture Changes From Previous Phase
 
-- New `eval/drift_benchmark.py`: 30 labeled synthetic clips.
+- New `eval/drift_benchmark.py`: 28 labeled synthetic clips.
 - New `eval/run_benchmark.py`: runs Baseline A, Baseline F, and the
   promotion-disabled ablation; computes precision/recall for
   unexplained-drift detection; writes a JSON report.
