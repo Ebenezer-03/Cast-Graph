@@ -6,3 +6,11 @@ venv/
 .env
 .pytest_cache/
 runs/
+
+.vercel
+.env*
+
+# local agent tooling, not part of the project
+.agents/
+.claude/
+skills-lock.json
