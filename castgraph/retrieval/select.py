@@ -19,5 +19,6 @@ def retrieve(store: MemoryStore, entity_ids: list[str]) -> dict:
         result[entity_id] = {
             "name": entity.name,
             "canonical": {attr: ca.value for attr, ca in entity.canonical.items()},
+            "confidence": {attr: ca.confidence for attr, ca in entity.canonical.items()},
         }
     return result
