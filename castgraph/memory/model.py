@@ -105,6 +105,10 @@ class Entity:
     # checking (e.g. "current_outfit" if it's meant to change every scene).
     # Empty by default -> behavior identical to before this phase.
     dynamic_attributes: set[str] = field(default_factory=set)
+    # Working state for promotion (Phase 5, subtask 11): attribute ->
+    # (candidate_value, consecutive_count). Deliberately excluded from
+    # to_json() output -- it's bookkeeping, not truth (Principle 1/4).
+    pending_promotion: dict[str, tuple[Any, int]] = field(default_factory=dict, compare=False)
 
 
 class MemoryStore:
@@ -135,6 +139,26 @@ class MemoryStore:
                 value=value, evidence=[clip_ref], established_at=clip_ref.clip_id
             )
 
+    def promote(self, entity_id: str, attribute: str, new_value: Any, clip_ref: ClipRef, reasoning: str) -> None:
+        """Archives the current canonical value as an exception classified
+        PROMOTED_FROM_PREVIOUS, then makes new_value canonical. See
+        docs/phases/PHASE_05.md subtask 11 -- promotion threshold/policy
+        lives in castgraph/drift/reconcile.py, not here."""
+        entity = self.entities[entity_id]
+        old = entity.canonical.get(attribute)
+        if old is not None:
+            entity.exceptions.append(Deviation(
+                attribute=attribute,
+                observed_value=new_value,
+                canonical_value=old.value,
+                clip_ref=clip_ref,
+                classification="PROMOTED_FROM_PREVIOUS",
+                reasoning=reasoning,
+            ))
+        entity.canonical[attribute] = CanonicalAttribute(
+            value=new_value, evidence=[clip_ref], established_at=clip_ref.clip_id
+        )
+
     def record_exception(self, entity_id: str, deviation: Deviation) -> None:
         self.entities[entity_id].exceptions.append(deviation)
 
@@ -145,9 +169,16 @@ class MemoryStore:
         self.events.append(event)
 
     def to_json(self) -> str:
+        entities = {}
+        for eid, e in self.entities.items():
+            d = asdict(e)
+            # pending_promotion is working bookkeeping, not persistent
+            # truth -- excluded so memory stays compact (Principle 1/4).
+            d.pop("pending_promotion", None)
+            entities[eid] = d
         return json.dumps(
             {
-                "entities": {eid: asdict(e) for eid, e in self.entities.items()},
+                "entities": entities,
                 "world_rules": [asdict(r) for r in self.world_rules],
                 "events": [asdict(e) for e in self.events],
             },
