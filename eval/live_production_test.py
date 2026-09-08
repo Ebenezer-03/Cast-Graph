@@ -15,6 +15,7 @@ under test.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
@@ -27,6 +28,7 @@ from scenario.marcus_sarah import CHARACTER, CLIPS
 BASE_URL = "https://cast-graph.vercel.app/"
 # Space requests out to respect the shared free-tier Gemini quota
 # (decision 0004) -- each clip triggers 2-3 real LLM calls server-side.
+# Irrelevant when --force-stub is used (no LLM call happens at all).
 SECONDS_BETWEEN_REQUESTS = 20
 
 # Expected report status per clip, keyed by clip id -- matches the
@@ -49,9 +51,12 @@ def voice_status(report: list[dict]) -> str | None:
     return next((r["status"] for r in report if r["attribute"] == "voice"), None)
 
 
-def run() -> int:
+def run(force_stub: bool = False) -> int:
     project_id = f"prod-e2e-{uuid.uuid4().hex[:8]}"
     print(f"Project id: {project_id}")
+    if force_stub:
+        print("force_stub=True: this run does NOT exercise the real LLM (decision 0005) "
+              "-- it validates the deployment/Postgres/HTTP path only.")
 
     hr("HEALTH CHECK")
     health = requests.get(BASE_URL, timeout=30)
@@ -69,6 +74,7 @@ def run() -> int:
             "clip_id": clip["id"],
             "prompt": clip["prompt"],
             "clip_text": clip["clip_text"],
+            "force_stub": force_stub,
         }
         print(f"POST {BASE_URL}\n  prompt: {clip['prompt']}")
 
@@ -97,7 +103,7 @@ def run() -> int:
             results.append({"clip": clip["id"], "ok": True, "expected": expected,
                              "actual": actual, "match": match, "reasoner": body["reasoner"]})
 
-        if i < len(CLIPS) - 1:
+        if i < len(CLIPS) - 1 and not force_stub:
             print(f"  (waiting {SECONDS_BETWEEN_REQUESTS}s before next request, per decision 0004)")
             time.sleep(SECONDS_BETWEEN_REQUESTS)
 
@@ -113,4 +119,9 @@ def run() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--force-stub", action="store_true",
+                         help="Use StubReasoner instead of the real LLM (decision 0005) -- "
+                              "validates deployment/Postgres/HTTP only, not real reasoning.")
+    args = parser.parse_args()
+    sys.exit(run(force_stub=args.force_stub))
