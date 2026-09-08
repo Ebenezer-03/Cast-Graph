@@ -23,6 +23,7 @@ def reconcile(
     clip_ref: ClipRef,
     narrative_context: str,
     reasoner: Reasoner,
+    promotion_threshold: int = PROMOTION_THRESHOLD,
 ) -> list[dict]:
     """Returns a per-attribute verification report: one entry per observed
     attribute with its status, so weaknesses aren't hidden behind one
@@ -85,13 +86,13 @@ def reconcile(
                 count = 1
             entity.pending_promotion[attribute] = (observed_value, count)
 
-            if count >= PROMOTION_THRESHOLD:
+            if count >= promotion_threshold:
                 store.promote(
                     entity_id, attribute, observed_value, clip_ref,
                     reasoning=(
                         f"{attribute}={observed_value!r} observed {count} consecutive "
                         f"times without explanation; promoted to canonical "
-                        f"(threshold={PROMOTION_THRESHOLD})."
+                        f"(threshold={promotion_threshold})."
                     ),
                 )
                 entity.pending_promotion.pop(attribute, None)
