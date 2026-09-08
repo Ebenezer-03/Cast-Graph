@@ -23,6 +23,14 @@ def reconcile(
     report: list[dict] = []
 
     for attribute, observed_value in observed.items():
+        if attribute in entity.dynamic_attributes:
+            report.append({
+                "attribute": attribute,
+                "status": "DYNAMIC",
+                "detail": "declared dynamic; not subject to consistency checking",
+            })
+            continue
+
         if attribute not in entity.canonical:
             store.establish(entity_id, attribute, observed_value, clip_ref)
             report.append({
@@ -35,6 +43,7 @@ def reconcile(
         canonical_value = entity.canonical[attribute].value
         if canonical_value == observed_value:
             entity.canonical[attribute].evidence.append(clip_ref)
+            entity.canonical[attribute].reinforce()
             report.append({
                 "attribute": attribute,
                 "status": "CONSISTENT",
