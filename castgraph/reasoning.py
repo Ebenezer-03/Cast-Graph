@@ -88,6 +88,17 @@ class StubReasoner:
     def classify_drift(self, attribute: str, canonical_value: str, observed_value: str,
                         narrative_context: str) -> dict:
         cues = extract_transformation_cues(narrative_context)
+        if "disguise" in cues and "injury" in cues:
+            return {
+                "classification": "AMBIGUOUS",
+                "reasoning": (
+                    f"{attribute} differs from canonical ({canonical_value!r} -> "
+                    f"{observed_value!r}); both disguise and injury cues are "
+                    f"present in the narrative context, and a keyword match "
+                    f"can't resolve which (if either) actually applies. "
+                    f"Surfaced for review rather than guessed at."
+                ),
+            }
         if "disguise" in cues:
             return {
                 "classification": "TEMPORARY_OVERRIDE",
