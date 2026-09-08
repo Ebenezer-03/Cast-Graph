@@ -1,11 +1,19 @@
 """Phases 10 + 11 + 5 combined: for each observed attribute, compare against
 canonical state, classify any deviation, and reconcile — never overwriting
-canonical state on a single new observation (Principle 5).
+canonical state on a single new observation (Principle 5). Also implements
+Phase 5's promotion policy: a sustained, repeated "unexplained" value
+eventually becomes the new canonical truth, rather than staying stuck in
+`unexplained` forever — see docs/phases/PHASE_05.md subtask 11.
 """
 from __future__ import annotations
 
 from castgraph.memory import ClipRef, Deviation, MemoryStore
 from castgraph.reasoning import Reasoner
+
+# Number of consecutive matching UNEXPLAINED_DRIFT/AMBIGUOUS observations
+# required before promoting a value to canonical. An ENGINEERING ASSUMPTION,
+# not validated against real data -- see docs/phases/PHASE_05.md subtask 11.
+PROMOTION_THRESHOLD = 2
 
 
 def reconcile(
@@ -44,6 +52,7 @@ def reconcile(
         if canonical_value == observed_value:
             entity.canonical[attribute].evidence.append(clip_ref)
             entity.canonical[attribute].reinforce()
+            entity.pending_promotion.pop(attribute, None)
             report.append({
                 "attribute": attribute,
                 "status": "CONSISTENT",
@@ -65,8 +74,33 @@ def reconcile(
 
         if classification in ("EXPECTED_CHANGE", "EXPLAINED_TRANSITION", "TEMPORARY_OVERRIDE"):
             store.record_exception(entity_id, deviation)
-        else:  # UNEXPLAINED_DRIFT, AMBIGUOUS, or an unrecognized label -> don't touch canonical
+            entity.pending_promotion.pop(attribute, None)
+        else:  # UNEXPLAINED_DRIFT, AMBIGUOUS, or an unrecognized label
             store.record_unexplained(entity_id, deviation)
+
+            candidate, count = entity.pending_promotion.get(attribute, (None, 0))
+            if candidate == observed_value:
+                count += 1
+            else:
+                count = 1
+            entity.pending_promotion[attribute] = (observed_value, count)
+
+            if count >= PROMOTION_THRESHOLD:
+                store.promote(
+                    entity_id, attribute, observed_value, clip_ref,
+                    reasoning=(
+                        f"{attribute}={observed_value!r} observed {count} consecutive "
+                        f"times without explanation; promoted to canonical "
+                        f"(threshold={PROMOTION_THRESHOLD})."
+                    ),
+                )
+                entity.pending_promotion.pop(attribute, None)
+                report.append({
+                    "attribute": attribute,
+                    "status": "PROMOTED",
+                    "detail": f"{classification} repeated {count}x; new canonical value is {observed_value!r}",
+                })
+                continue
 
         report.append({
             "attribute": attribute,
