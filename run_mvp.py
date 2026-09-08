@@ -19,7 +19,7 @@ from castgraph.memory import MemoryStore
 from castgraph.observation import observe
 from castgraph.prompt import extract_location
 from castgraph.reasoning import StubReasoner
-from castgraph.retrieval import retrieve
+from castgraph.retrieval import retrieve, compare_retrieval_strategies
 from scenario.marcus_sarah import CHARACTER, CLIPS
 
 REASONER = StubReasoner()
@@ -71,6 +71,9 @@ def run() -> None:
 
     hr("MEMORY SIZE")
     print(f"{store.size_bytes()} bytes")
+
+    hr("RETRIEVAL COMPARISON (scenario-specific, see PHASE_08.md before generalizing)")
+    print(compare_retrieval_strategies(store, [entity_id]))
 
     hr("UNEXPLAINED DRIFT REQUIRING REVIEW")
     entity = store.entities[entity_id]
