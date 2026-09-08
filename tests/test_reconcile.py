@@ -53,6 +53,17 @@ def test_unexplained_change_is_flagged_not_applied():
     assert len(store.entities["marcus"].exceptions) == 0
 
 
+def test_dynamic_attribute_skips_reconciliation():
+    store = _store_with_marcus()
+    store.entities["marcus"].dynamic_attributes.add("outfit")
+    report = reconcile(
+        store, "marcus", {"outfit": "red jacket"}, ClipRef("ep2", "..."),
+        narrative_context="Marcus talks to Sarah.", reasoner=REASONER,
+    )
+    assert report[0]["status"] == "DYNAMIC"
+    assert "outfit" not in store.entities["marcus"].canonical
+
+
 def test_new_attribute_is_established_as_baseline():
     store = _store_with_marcus()
     report = reconcile(
