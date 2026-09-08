@@ -1,0 +1,63 @@
+"""Locks in the core claim of Phase 5/11: canonical state is never
+overwritten by a single new observation, and a disguise is classified
+differently than an unexplained change."""
+from castgraph.memory import ClipRef, MemoryStore
+from castgraph.drift import reconcile
+from castgraph.reasoning import StubReasoner
+
+REASONER = StubReasoner()
+
+
+def _store_with_marcus():
+    store = MemoryStore()
+    store.get_or_create("marcus", "Marcus")
+    store.establish("marcus", "voice", "deep/rough", ClipRef("ep1", "..."))
+    return store
+
+
+def test_matching_observation_is_consistent():
+    store = _store_with_marcus()
+    report = reconcile(
+        store, "marcus", {"voice": "deep/rough"}, ClipRef("ep2", "..."),
+        narrative_context="Marcus talks to Sarah.", reasoner=REASONER,
+    )
+    assert report[0]["status"] == "CONSISTENT"
+    assert store.entities["marcus"].canonical["voice"].value == "deep/rough"
+
+
+def test_disguise_is_temporary_override_not_drift():
+    store = _store_with_marcus()
+    report = reconcile(
+        store, "marcus", {"voice": "soft/high"}, ClipRef("ep3", "..."),
+        narrative_context="Marcus is disguising his voice to avoid being recognized.",
+        reasoner=REASONER,
+    )
+    assert report[0]["status"] == "TEMPORARY_OVERRIDE"
+    # canonical state must NOT change
+    assert store.entities["marcus"].canonical["voice"].value == "deep/rough"
+    assert len(store.entities["marcus"].exceptions) == 1
+    assert len(store.entities["marcus"].unexplained) == 0
+
+
+def test_unexplained_change_is_flagged_not_applied():
+    store = _store_with_marcus()
+    report = reconcile(
+        store, "marcus", {"voice": "soft/high"}, ClipRef("ep4", "..."),
+        narrative_context="Marcus talks to Sarah at the docks again.",
+        reasoner=REASONER,
+    )
+    assert report[0]["status"] == "UNEXPLAINED_DRIFT"
+    # canonical state must NOT change even though nothing explained it
+    assert store.entities["marcus"].canonical["voice"].value == "deep/rough"
+    assert len(store.entities["marcus"].unexplained) == 1
+    assert len(store.entities["marcus"].exceptions) == 0
+
+
+def test_new_attribute_is_established_as_baseline():
+    store = _store_with_marcus()
+    report = reconcile(
+        store, "marcus", {"hair": "black"}, ClipRef("ep1", "..."),
+        narrative_context="Marcus talks to Sarah.", reasoner=REASONER,
+    )
+    assert report[0]["status"] == "ESTABLISHED"
+    assert store.entities["marcus"].canonical["hair"].value == "black"
