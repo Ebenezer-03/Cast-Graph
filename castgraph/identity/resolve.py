@@ -1,16 +1,33 @@
-"""Phase 4, reduced to name-based matching. Documented limitation: with no
-real video, there are no face/voice embeddings to fuse — see ROADMAP.md.
-Kept as its own module (not inlined elsewhere) so a real multimodal
-implementation can replace this function without touching call sites.
+"""Phase 4, reduced to name/alias-based matching. Documented limitation:
+with no real video, there are no face/voice embeddings to fuse — see
+docs/phases/PHASE_04.md for the full multimodal design and what's blocked.
 """
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from castgraph.memory import MemoryStore
 
 
-def resolve_identity(store: MemoryStore, name: str) -> str:
-    """Returns an entity_id for `name`, creating one if unseen. MVP-only:
-    exact case-insensitive name match, no fuzzy/alias/embedding matching."""
-    entity_id = name.strip().lower().replace(" ", "_")
+@dataclass
+class IdentityMatch:
+    entity_id: str
+    confidence: float
+    method: str  # "exact_name" | "alias" | "new"
+
+
+def resolve_identity(store: MemoryStore, name: str) -> IdentityMatch:
+    """Resolves `name` to a known entity by exact name or registered alias,
+    creating a new entity only when neither matches. MVP-only: no fuzzy
+    matching, coreference, or multimodal fusion — see PHASE_04.md."""
+    needle = name.strip().lower()
+
+    for entity in store.entities.values():
+        if entity.name.strip().lower() == needle:
+            return IdentityMatch(entity.id, confidence=1.0, method="exact_name")
+        if needle in {a.strip().lower() for a in entity.aliases}:
+            return IdentityMatch(entity.id, confidence=0.8, method="alias")
+
+    entity_id = needle.replace(" ", "_")
     store.get_or_create(entity_id, name)
-    return entity_id
+    return IdentityMatch(entity_id, confidence=1.0, method="new")

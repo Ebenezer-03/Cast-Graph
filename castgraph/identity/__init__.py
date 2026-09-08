@@ -1,3 +1,3 @@
-from .resolve import resolve_identity
+from .resolve import resolve_identity, IdentityMatch
 
-__all__ = ["resolve_identity"]
+__all__ = ["resolve_identity", "IdentityMatch"]
