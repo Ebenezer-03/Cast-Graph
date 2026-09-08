@@ -32,6 +32,19 @@ update it whenever scope is added, cut, or deferred.
   deviations into CONSISTENT / EXPECTED_CHANGE / EXPLAINED_TRANSITION /
   TEMPORARY_OVERRIDE / UNEXPLAINED_DRIFT / AMBIGUOUS given narrative context.
 
+## Correction from the original plan
+
+The plan called for real LLM calls via the Vercel AI Gateway. No gateway/API
+key actually turned out to be available in this environment (an earlier
+check reporting one was present was a shell-quoting bug). Rather than block,
+the reasoning steps (prompt understanding, observation extraction, drift
+classification) are stubbed deterministically for now — see
+`decisions/0002-stub-llm-reasoning-for-now.md`. **This means today's run
+proves the memory/reconciliation architecture, not that the reasoning steps
+generalize beyond the demo scenario.** Swapping in the real
+`GatewayReasoner` (already written, in `castgraph/reasoning.py`) once a key
+exists is a one-line change in `run_mvp.py`.
+
 ## Explicitly deferred (not built, not faked)
 
 - **Phase 6 (Temporal World-State Engine)** — `castgraph/temporal/` is a stub.
