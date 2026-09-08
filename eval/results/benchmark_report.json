@@ -1,0 +1,56 @@
+{
+  "caveat": "See docs/phases/PHASE_15.md before quoting any number here: this is a small, synthetic, mechanism-level benchmark, not a validated real-world drift-detection result.",
+  "clip_count": 28,
+  "baseline_a": {
+    "name": "baseline_a_no_memory",
+    "flags_raised": 0,
+    "note": "no reconciliation exists in this baseline; it cannot ever flag a deviation"
+  },
+  "baseline_f": {
+    "name": "castgraph(promotion_threshold=2)",
+    "status_accuracy": 0.9285714285714286,
+    "graded": 28,
+    "drift_detection_precision": 0.6666666666666666,
+    "drift_detection_recall": 1.0,
+    "confusion": {
+      "tp": 4,
+      "fp": 2,
+      "fn": 0,
+      "tn": 21
+    },
+    "mistakes": [
+      {
+        "clip": "clip15",
+        "category": "consistent",
+        "expected": [
+          "CONSISTENT"
+        ],
+        "actual": "UNEXPLAINED_DRIFT"
+      },
+      {
+        "clip": "clip16",
+        "category": "consistent",
+        "expected": [
+          "CONSISTENT"
+        ],
+        "actual": "PROMOTED"
+      }
+    ],
+    "final_memory_bytes": 13179
+  },
+  "ablation_no_promotion": {
+    "name": "castgraph(promotion_threshold=10000)",
+    "status_accuracy": 1.0,
+    "graded": 28,
+    "drift_detection_precision": 1.0,
+    "drift_detection_recall": 1.0,
+    "confusion": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 0,
+      "tn": 23
+    },
+    "mistakes": [],
+    "final_memory_bytes": 12577
+  }
+}
