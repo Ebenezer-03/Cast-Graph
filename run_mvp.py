@@ -17,6 +17,7 @@ from castgraph.drift import reconcile
 from castgraph.identity import resolve_identity
 from castgraph.memory import MemoryStore
 from castgraph.observation import observe
+from castgraph.prompt import extract_location
 from castgraph.reasoning import StubReasoner
 from castgraph.retrieval import retrieve
 from scenario.marcus_sarah import CHARACTER, CLIPS
@@ -34,6 +35,7 @@ def run() -> None:
     entity_id = identity.entity_id
     print(f"Identity resolution: {CHARACTER} -> {entity_id} "
           f"(method={identity.method}, confidence={identity.confidence})")
+    name_to_id = {CHARACTER: entity_id}
 
     for clip in CLIPS:
         hr(f"CLIP {clip['id']}")
@@ -41,7 +43,11 @@ def run() -> None:
 
         # 1. prompt understanding + selective retrieval (before generation)
         understanding = REASONER.understand_prompt(clip["prompt"], [CHARACTER])
-        retrieved = retrieve(store, [entity_id])
+        location = extract_location(clip["prompt"])
+        print(f"Extracted location: {location!r}")
+
+        relevant_ids = [name_to_id[n] for n in understanding["entities"] if n in name_to_id]
+        retrieved = retrieve(store, relevant_ids)
         context = build_context(retrieved, understanding["narrative_context"])
         print("\n--- retrieved context handed to (stubbed) generator ---")
         print(context)
