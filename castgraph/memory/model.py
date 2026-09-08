@@ -55,6 +55,9 @@ class Deviation:
     # behavior). Auto-expiry logic is NOT implemented yet — needs Phase 6
     # temporal reasoning; this field just makes expiry expressible.
     active_until: str | None = None
+    # Populated only by reasoners that actually provide one (not
+    # StubReasoner) -- see docs/phases/PHASE_11.md.
+    confidence: float | None = None
 
 
 @dataclass
