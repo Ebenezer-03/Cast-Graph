@@ -7,24 +7,24 @@ verification report at each step.
 
 "Generate" is stubbed (clips are pre-written synthetic text, see
 scenario/marcus_sarah.py) since no real video generator is wired up.
-Reasoning steps use StubReasoner (see decisions/0002) — swap in
-GatewayReasoner once a real AI_GATEWAY_API_KEY/ANTHROPIC_API_KEY exists.
+
+Reasoner selection: uses GeminiReasoner (real LLM, decision 0003) when
+GEMINI_API_KEY is set, otherwise falls back to StubReasoner (decision
+0002). Set GEMINI_API_KEY to run the real end-to-end test.
 """
 from __future__ import annotations
 
-from castgraph.adapters import build_context_data, render_text
+import os
+
 from castgraph.consistency import consistency_report
-from castgraph.drift import reconcile
-from castgraph.identity import resolve_identity
 from castgraph.memory import MemoryStore
-from castgraph.observation import observe
-from castgraph.prompt import extract_location
+from castgraph.pipeline import run_clip
 from castgraph.provenance import explain
-from castgraph.reasoning import StubReasoner
-from castgraph.retrieval import retrieve, compare_retrieval_strategies
+from castgraph.reasoning import GeminiReasoner, StubReasoner
+from castgraph.retrieval import compare_retrieval_strategies
 from scenario.marcus_sarah import CHARACTER, CLIPS
 
-REASONER = StubReasoner()
+REASONER = GeminiReasoner() if os.environ.get("GEMINI_API_KEY") else StubReasoner()
 
 
 def hr(title: str) -> None:
@@ -32,44 +32,30 @@ def hr(title: str) -> None:
 
 
 def run() -> None:
+    print(f"Reasoner: {type(REASONER).__name__}")
     store = MemoryStore()
-    identity = resolve_identity(store, CHARACTER)
-    entity_id = identity.entity_id
-    print(f"Identity resolution: {CHARACTER} -> {entity_id} "
-          f"(method={identity.method}, confidence={identity.confidence})")
-    name_to_id = {CHARACTER: entity_id}
+    entity_id = None
     history: list[list[dict]] = []
 
     for clip in CLIPS:
         hr(f"CLIP {clip['id']}")
         print(f"Creator prompt: {clip['prompt']}")
 
-        # 1. prompt understanding + selective retrieval (before generation)
-        understanding = REASONER.understand_prompt(clip["prompt"], [CHARACTER])
-        location = extract_location(clip["prompt"])
-        print(f"Extracted location: {location!r}")
-
-        relevant_ids = [name_to_id[n] for n in understanding["entities"] if n in name_to_id]
-        retrieved = retrieve(store, relevant_ids)
-        context_data = build_context_data(retrieved, understanding["narrative_context"], location=location)
-        context = render_text(context_data)
-        print("\n--- retrieved context handed to (stubbed) generator ---")
-        print(context)
-
-        # 2. "generation" is stubbed: the clip text is pre-written
-        # 3. observation: extract structured attributes from the generated clip
-        observed, clip_ref = observe(clip["id"], clip["clip_text"], CHARACTER, REASONER)
-        print(f"\nObserved attributes: {observed}")
-
-        # 4. verification + drift attribution + reconciliation
-        report = reconcile(
-            store, entity_id, observed, clip_ref,
-            narrative_context=clip["prompt"], reasoner=REASONER,
+        result = run_clip(
+            store, CHARACTER, clip["id"], clip["clip_text"], clip["prompt"], REASONER,
         )
+        entity_id = result.entity_id
+
+        print(f"Identity resolution: {CHARACTER} -> {result.entity_id} "
+              f"(method={result.identity.method}, confidence={result.identity.confidence})")
+        print(f"Extracted location: {result.location!r}")
+        print("\n--- retrieved context handed to (stubbed) generator ---")
+        print(result.context)
+        print(f"\nObserved attributes: {result.observed}")
         print("\nVerification report:")
-        for item in report:
+        for item in result.report:
             print(f"  [{item['status']}] {item['attribute']}: {item['detail']}")
-        history.append(report)
+        history.append(result.report)
 
     hr("FINAL MEMORY STATE")
     print(store.to_json())
