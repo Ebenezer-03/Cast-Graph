@@ -1,80 +1,69 @@
 # Roadmap
 
-Maps the 15-phase master plan to what's actually done, and to rough future
-sessions. This file is the shared-understanding anchor for the project —
-update it whenever scope is added, cut, or deferred.
+Maps the 15-phase master plan to what's actually done. All 15 phases now
+have a formal doc under `docs/phases/PHASE_XX.md` (objective, subtasks,
+alternatives considered, architecture changes, risks, validation, quality
+gate — the full format the original brief required). This file is the
+shared-understanding summary; the phase docs are the source of truth for
+what each phase actually decided.
 
-## Done (this session)
+## All 15 phases: status
 
-- Phase 1 (Research Formalization) — informal only: problem statement lives
-  in `docs/ARCHITECTURE.md`, not a standalone formal doc.
-- Phase 2 (World State & Memory Model) — minimal version in `castgraph/memory/`:
-  canonical attributes, evidence, exceptions/overrides. No confidence decay,
-  no versioning yet.
-- Phase 3 (Observation Engine) — text-only: `castgraph/observation/` extracts
-  structured attributes from a synthetic clip description via LLM. No real
-  video/audio ingestion (no generator exists to ingest from).
-- Phase 4 (Identity Resolution) — reduced to name-based matching in
-  `castgraph/identity/`. Documented as a known limitation: no face/voice
-  embeddings exist in a text-only MVP.
-- Phase 5 (Canonical State Formation) — basic reconciliation: canonical
-  attributes are not overwritten by a single new observation; repeated
-  evidence is what promotes a value.
-- Phase 7 (Prompt Understanding) — minimal entity/intent extraction via LLM
-  in `castgraph/adapters/` (folded in, not a separate module yet).
-- Phase 8 (Selective Retrieval) — basic entity-based retrieval in
-  `castgraph/retrieval/`, no semantic/embedding retrieval yet.
-- Phase 9 (Generation Context Adapter) — a single generator-agnostic text
-  context block; no multi-generator adapters yet (nothing to adapt to).
-- Phase 10 (Consistency Verification) — per-attribute comparison, no
-  aggregate scoring formula yet.
-- Phase 11 (Drift Attribution) — the core reasoning step: LLM classifies
-  deviations into CONSISTENT / EXPECTED_CHANGE / EXPLAINED_TRANSITION /
-  TEMPORARY_OVERRIDE / UNEXPLAINED_DRIFT / AMBIGUOUS given narrative context.
+Every phase below has a complete `docs/phases/PHASE_XX.md`. "Real code"
+means implemented and tested this session; "design only" means the phase
+doc exists but building it would be speculative (no scenario/model/product
+to validate against) and was explicitly not faked.
 
-## Correction from the original plan
+| Phase | Doc | Real code | Note |
+|---|---|---|---|
+| 1. Research Formalization | [PHASE_01](docs/phases/PHASE_01.md) | no (definitions only) | includes a real, grounded novelty search (Memento, VideoMemory, EntityBench, etc.) |
+| 2. World State & Memory Model | [PHASE_02](docs/phases/PHASE_02.md) | yes | relationships/events/world-rules modeled, mostly unexercised |
+| 3. Multimodal Observation Engine | [PHASE_03](docs/phases/PHASE_03.md) | text-only | no real video/audio models exist |
+| 4. Identity Resolution | [PHASE_04](docs/phases/PHASE_04.md) | name/alias only | no face/voice embeddings exist |
+| 5. Canonical State Formation | [PHASE_05](docs/phases/PHASE_05.md) | yes | promotion mechanism (sustained drift -> new canonical) |
+| 6. Temporal World-State Engine | [PHASE_06](docs/phases/PHASE_06.md) | yes, narrow | `canonical_state_at` reconstruction; no flashbacks/intervals |
+| 7. Prompt Understanding | [PHASE_07](docs/phases/PHASE_07.md) | yes, narrow | keyword/regex location + transformation-cue extraction |
+| 8. Selective Memory Retrieval | [PHASE_08](docs/phases/PHASE_08.md) | yes | entity-based only; a small real retrieval-size comparison |
+| 9. Generation Context Adapter | [PHASE_09](docs/phases/PHASE_09.md) | yes | structured context + two renderers (text, JSON) |
+| 10. Consistency Verification | [PHASE_10](docs/phases/PHASE_10.md) | yes | per-attribute rates + explicitly-caveated naive aggregate |
+| 11. Drift Attribution | [PHASE_11](docs/phases/PHASE_11.md) | yes | all 6 classifications now reachable, incl. AMBIGUOUS |
+| 12. Consolidation & Compression | [PHASE_12](docs/phases/PHASE_12.md) | yes | evidence-capping + budget enforcement, tested |
+| 13. Provenance & Auditability | [PHASE_13](docs/phases/PHASE_13.md) | yes | plain-language `explain()` audit function |
+| 14. Production Architecture | [PHASE_14](docs/phases/PHASE_14.md) | design only | no product/workload exists — building it would be speculative |
+| 15. Benchmarking & Validation | [PHASE_15](docs/phases/PHASE_15.md) | yes, narrow | real 28-clip synthetic benchmark + baselines + one ablation, run and checked in |
+
+See [FINAL_SUMMARY.md](FINAL_SUMMARY.md) for the consolidated architecture,
+findings, and honest limitations across all 15 phases.
+
+## Correction from the original plan (still in effect)
 
 The plan called for real LLM calls via the Vercel AI Gateway. No gateway/API
-key actually turned out to be available in this environment (an earlier
-check reporting one was present was a shell-quoting bug). Rather than block,
-the reasoning steps (prompt understanding, observation extraction, drift
-classification) are stubbed deterministically for now — see
-`decisions/0002-stub-llm-reasoning-for-now.md`. **This means today's run
-proves the memory/reconciliation architecture, not that the reasoning steps
-generalize beyond the demo scenario.** Swapping in the real
-`GatewayReasoner` (already written, in `castgraph/reasoning.py`) once a key
-exists is a one-line change in `run_mvp.py`.
+key turned out to be available in this environment (an earlier check
+reporting one was present was a shell-quoting bug). The reasoning steps
+(prompt understanding, observation extraction, drift classification) are
+stubbed deterministically (`StubReasoner`) — see
+`decisions/0002-stub-llm-reasoning-for-now.md`. **Every result in this
+project, including the Phase 15 benchmark, tests the memory/reconciliation
+architecture's plumbing, not whether the reasoning steps generalize to real,
+varied language.** Swapping in `GatewayReasoner` (already written) once a
+real key exists is a one-line change in each call site.
 
-## Explicitly deferred (not built, not faked)
+## What's still genuinely open (not busywork — real next steps)
 
-- **Phase 6 (Temporal World-State Engine)** — `castgraph/temporal/` is a stub.
-  Needs real event ordering across more than a handful of clips to be worth
-  designing properly.
-- **Phase 12 (Consolidation/Compression)** — only trivial evidence dedup
-  exists. Real compression-vs-consistency tradeoffs need more memory volume
-  than a 4-clip MVP produces.
-- **Phase 13 (Provenance/Auditability)** — evidence references (clip id +
-  span) are stored, but no audit UI, no correction workflow.
-- **Phase 14 (Production Architecture)** — out of scope indefinitely. No
-  product, no real workload, no users. Revisit only if that changes.
-- **Phase 15 (Benchmarking/Validation)**, the ablation studies, the
-  memory-budget matrix, and the long-horizon experiment — all require either
-  a real video generator or a much larger synthetic dataset to produce
-  numbers that mean anything. Doing them now would be theater. Needs a
-  dedicated session with a real dataset design first.
-- **Novelty/literature analysis** — needs real web/paper research, not
-  memorized citations. Dedicated research-pass session, not this one.
-- **Full 20-doc engineering doc set** — collapsed into this README +
-  `ROADMAP.md` + `docs/ARCHITECTURE.md` + `decisions/`. Will split out
-  individual docs only if/when a section outgrows a shared file.
-
-## Rough future sessions
-
-1. Temporal world-state engine (Phase 6) + versioned canonical state (extend Phase 5).
-2. Real selective retrieval with a relevance-scoring comparison (full history vs
-   naive vs structured), still against synthetic clips.
-3. Consolidation/compression experiment once there's enough synthetic memory
-   volume to compress meaningfully.
-4. Dedicated research pass: literature/novelty analysis with real citations.
-5. Benchmark dataset design + drift-injection scenarios (Phase 15 prerequisite).
-6. Only after 1-5: revisit whether production architecture is warranted.
+1. Get a real `AI_GATEWAY_API_KEY`/`ANTHROPIC_API_KEY` working and exercise
+   `GatewayReasoner` — this is the single highest-value next step; almost
+   nothing about classification quality is validated until this happens.
+2. A real face/voice identity model — the project's biggest capability gap
+   relative to its own motivating example (a face changing while the name
+   stays the same is currently undetectable).
+3. A second character / relationship scenario — `Relationship` (Phase 2)
+   has no reconciliation logic yet because nothing has ever needed it.
+4. Fix the Phase 15 benchmark's labeling artifact (documented in
+   `docs/phases/PHASE_15.md` subtask 10): "consistent" labels need to
+   account for legitimate promotion, not just the original value.
+5. A real video generator integration, whenever one is chosen — everything
+   built so far is designed to plug in behind `castgraph/adapters/` and
+   `castgraph/observation/` without changing the memory/drift/retrieval
+   core.
+6. Production architecture (Phase 14) — deferred indefinitely, revisit only
+   if a real product/workload materializes.
