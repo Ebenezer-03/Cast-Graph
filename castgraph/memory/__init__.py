@@ -1,3 +1,21 @@
-from .model import MemoryStore, Entity, CanonicalAttribute, ClipRef, Deviation
+from .model import (
+    MemoryStore,
+    Entity,
+    CanonicalAttribute,
+    ClipRef,
+    Deviation,
+    Relationship,
+    Event,
+    WorldRule,
+)
 
-__all__ = ["MemoryStore", "Entity", "CanonicalAttribute", "ClipRef", "Deviation"]
+__all__ = [
+    "MemoryStore",
+    "Entity",
+    "CanonicalAttribute",
+    "ClipRef",
+    "Deviation",
+    "Relationship",
+    "Event",
+    "WorldRule",
+]

@@ -1,6 +1,5 @@
 """The persistent memory fabric: canonical state, evidence, and recorded
-deviations. This is the logical model from Phase 2 of the design brief,
-reduced to what the MVP scenario actually needs.
+deviations. This is the logical model from Phase 2 of the design brief.
 
 Deliberately not a graph database, not a vector store: plain dataclasses
 serialized to JSON. See decisions/0001-storage-agnostic-json.md.
@@ -29,6 +28,14 @@ class CanonicalAttribute:
     value: Any
     evidence: list[ClipRef] = field(default_factory=list)
     established_at: str = ""  # clip_id where this was first established
+    # Saturating evidence counter, NOT a calibrated probability — see
+    # docs/phases/PHASE_02.md subtask 11. Do not present this to a user as
+    # a real confidence percentage until it's backed by real observation
+    # noise data.
+    confidence: float = 0.5
+
+    def reinforce(self, step: float = 0.1) -> None:
+        self.confidence = min(1.0, self.confidence + step)
 
 
 @dataclass
@@ -43,16 +50,57 @@ class Deviation:
     classification: str  # CONSISTENT | EXPECTED_CHANGE | EXPLAINED_TRANSITION
                           # | TEMPORARY_OVERRIDE | UNEXPLAINED_DRIFT | AMBIGUOUS
     reasoning: str = ""
+    # Clip id after which this override should no longer be treated as
+    # active (e.g. the disguise ends). None = unbounded (current MVP
+    # behavior). Auto-expiry logic is NOT implemented yet — needs Phase 6
+    # temporal reasoning; this field just makes expiry expressible.
+    active_until: str | None = None
+
+
+@dataclass
+class Relationship:
+    """Joint state between two entities — not an attribute of either one
+    alone (see docs/phases/PHASE_02.md subtask 5 for why this replaced a
+    plain dict). Stored on the subject entity; mirrored onto the target too
+    when symmetric."""
+    target_id: str
+    kind: str  # e.g. "ally", "parent_of", "reports_to"
+    value: str = ""
+    evidence: list[ClipRef] = field(default_factory=list)
+    directional: bool = False
+
+
+@dataclass
+class Event:
+    """A recorded happening that justifies state changes — the causal link
+    Phase 11 (drift attribution) and Phase 13 (provenance) point back to.
+    Defined in this phase; not yet populated by run_mvp.py (see
+    docs/phases/PHASE_02.md Architecture Changes) — a real, named gap."""
+    clip_ref: ClipRef
+    entity_ids: list[str] = field(default_factory=list)
+    summary: str = ""
+
+
+@dataclass
+class WorldRule:
+    """A world-level constraint, not tied to any single entity."""
+    rule: str
+    evidence: list[ClipRef] = field(default_factory=list)
 
 
 @dataclass
 class Entity:
     id: str
     name: str
+    entity_type: str = "character"  # "character" | "location" | "object"
     canonical: dict[str, CanonicalAttribute] = field(default_factory=dict)
     exceptions: list[Deviation] = field(default_factory=list)
     unexplained: list[Deviation] = field(default_factory=list)
-    relationships: dict[str, str] = field(default_factory=dict)
+    relationships: dict[str, Relationship] = field(default_factory=dict)
+    # Attributes explicitly declared as never subject to consistency
+    # checking (e.g. "current_outfit" if it's meant to change every scene).
+    # Empty by default -> behavior identical to before this phase.
+    dynamic_attributes: set[str] = field(default_factory=set)
 
 
 class MemoryStore:
@@ -62,18 +110,22 @@ class MemoryStore:
 
     def __init__(self) -> None:
         self.entities: dict[str, Entity] = {}
+        self.world_rules: list[WorldRule] = []
+        self.events: list[Event] = []
 
-    def get_or_create(self, entity_id: str, name: str) -> Entity:
+    def get_or_create(self, entity_id: str, name: str, entity_type: str = "character") -> Entity:
         if entity_id not in self.entities:
-            self.entities[entity_id] = Entity(id=entity_id, name=name)
+            self.entities[entity_id] = Entity(id=entity_id, name=name, entity_type=entity_type)
         return self.entities[entity_id]
 
     def establish(self, entity_id: str, attribute: str, value: Any, clip_ref: ClipRef) -> None:
-        """First-time recording of a canonical attribute. Only used when no
-        canonical value exists yet for this attribute — see reconcile()."""
+        """First-time recording of a canonical attribute, or reinforcement of
+        an existing one with matching evidence. Only called for attributes
+        not in `dynamic_attributes` — see reconcile()."""
         entity = self.entities[entity_id]
         if attribute in entity.canonical:
             entity.canonical[attribute].evidence.append(clip_ref)
+            entity.canonical[attribute].reinforce()
         else:
             entity.canonical[attribute] = CanonicalAttribute(
                 value=value, evidence=[clip_ref], established_at=clip_ref.clip_id
@@ -85,9 +137,18 @@ class MemoryStore:
     def record_unexplained(self, entity_id: str, deviation: Deviation) -> None:
         self.entities[entity_id].unexplained.append(deviation)
 
+    def record_event(self, event: Event) -> None:
+        self.events.append(event)
+
     def to_json(self) -> str:
         return json.dumps(
-            {eid: asdict(e) for eid, e in self.entities.items()}, indent=2
+            {
+                "entities": {eid: asdict(e) for eid, e in self.entities.items()},
+                "world_rules": [asdict(r) for r in self.world_rules],
+                "events": [asdict(e) for e in self.events],
+            },
+            indent=2,
+            default=list,  # allows set (dynamic_attributes) to serialize
         )
 
     def size_bytes(self) -> int:
