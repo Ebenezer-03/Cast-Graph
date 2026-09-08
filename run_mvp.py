@@ -12,7 +12,7 @@ GatewayReasoner once a real AI_GATEWAY_API_KEY/ANTHROPIC_API_KEY exists.
 """
 from __future__ import annotations
 
-from castgraph.adapters import build_context
+from castgraph.adapters import build_context_data, render_text
 from castgraph.drift import reconcile
 from castgraph.identity import resolve_identity
 from castgraph.memory import MemoryStore
@@ -48,7 +48,8 @@ def run() -> None:
 
         relevant_ids = [name_to_id[n] for n in understanding["entities"] if n in name_to_id]
         retrieved = retrieve(store, relevant_ids)
-        context = build_context(retrieved, understanding["narrative_context"])
+        context_data = build_context_data(retrieved, understanding["narrative_context"], location=location)
+        context = render_text(context_data)
         print("\n--- retrieved context handed to (stubbed) generator ---")
         print(context)
 
