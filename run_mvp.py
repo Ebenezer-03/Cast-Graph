@@ -30,7 +30,10 @@ def hr(title: str) -> None:
 
 def run() -> None:
     store = MemoryStore()
-    entity_id = resolve_identity(store, CHARACTER)
+    identity = resolve_identity(store, CHARACTER)
+    entity_id = identity.entity_id
+    print(f"Identity resolution: {CHARACTER} -> {entity_id} "
+          f"(method={identity.method}, confidence={identity.confidence})")
 
     for clip in CLIPS:
         hr(f"CLIP {clip['id']}")
