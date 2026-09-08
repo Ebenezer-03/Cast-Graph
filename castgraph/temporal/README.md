@@ -1,12 +1,12 @@
-# Temporal world-state engine — stub
+# Temporal world-state engine
 
-Phase 6 of the design brief. Deliberately not implemented yet: the MVP's
-4-clip scenario has no flashbacks, time jumps, or overlapping intervals to
-reason about, so there's nothing real to design against yet.
+Phase 6 of the design brief, upgraded from a stub in `docs/phases/PHASE_06.md`:
+`canonical_state_at(store, entity_id, attribute, at_clip_id)` answers "what
+was this attribute's canonical value as of this clip", reconstructed from
+Phase 5's promotion chain — no separate history log needed.
 
-`castgraph.drift.reconcile` currently treats clips as a simple ordered
-sequence (evidence lists are append-only, in clip order). When a future
-session needs real temporal semantics (answering "what was true at time T",
-reconstructing state at an arbitrary point, reasoning about flashbacks),
-build it here rather than overloading the memory model — see ROADMAP.md,
-future session 1.
+**Still not implemented** (no scenario exists to design these against yet —
+see PHASE_06.md): temporal intervals, flashbacks, time jumps, relationship/
+object/location evolution, active-window tracking for temporary overrides.
+Clip processing order is assumed to equal story chronological order; that
+assumption breaks the moment a flashback scenario is built.
