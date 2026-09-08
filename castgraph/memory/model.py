@@ -186,7 +186,7 @@ class MemoryStore:
     def record_event(self, event: Event) -> None:
         self.events.append(event)
 
-    def to_json(self) -> str:
+    def to_dict(self) -> dict:
         entities = {}
         for eid, e in self.entities.items():
             d = asdict(e)
@@ -194,12 +194,19 @@ class MemoryStore:
             # truth -- excluded so memory stays compact (Principle 1/4).
             d.pop("pending_promotion", None)
             entities[eid] = d
+        return {
+            "entities": entities,
+            "world_rules": [asdict(r) for r in self.world_rules],
+            "events": [asdict(e) for e in self.events],
+            # clip_sequence must round-trip -- Phase 6 temporal reconstruction
+            # depends on it surviving a save/reload cycle (a real gap, fixed
+            # here rather than only noticed once production storage needed it).
+            "clip_sequence": list(self.clip_sequence),
+        }
+
+    def to_json(self) -> str:
         return json.dumps(
-            {
-                "entities": entities,
-                "world_rules": [asdict(r) for r in self.world_rules],
-                "events": [asdict(e) for e in self.events],
-            },
+            self.to_dict(),
             indent=2,
             default=list,  # allows set (dynamic_attributes) to serialize
         )
@@ -209,3 +216,76 @@ class MemoryStore:
 
     def save(self, path: str | Path) -> None:
         Path(path).write_text(self.to_json(), encoding="utf-8")
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MemoryStore":
+        """Reconstructs a MemoryStore from to_dict()'s output. Needed the
+        moment memory is persisted anywhere other than an in-process object
+        (e.g. Postgres, Phase 14) -- to_json() alone was write-only until
+        this existed, a real gap surfaced by going to production storage."""
+        store = cls()
+        for eid, edata in data.get("entities", {}).items():
+            entity = Entity(
+                id=edata["id"],
+                name=edata["name"],
+                entity_type=edata.get("entity_type", "character"),
+                aliases=set(edata.get("aliases", [])),
+                canonical={
+                    attr: CanonicalAttribute(
+                        value=v["value"],
+                        evidence=[ClipRef(**r) for r in v.get("evidence", [])],
+                        established_at=v.get("established_at", ""),
+                        confidence=v.get("confidence", 0.5),
+                        evidence_dropped=v.get("evidence_dropped", 0),
+                    )
+                    for attr, v in edata.get("canonical", {}).items()
+                },
+                exceptions=[_deviation_from_dict(d) for d in edata.get("exceptions", [])],
+                unexplained=[_deviation_from_dict(d) for d in edata.get("unexplained", [])],
+                relationships={
+                    k: Relationship(
+                        target_id=v["target_id"], kind=v["kind"], value=v.get("value", ""),
+                        evidence=[ClipRef(**r) for r in v.get("evidence", [])],
+                        directional=v.get("directional", False),
+                    )
+                    for k, v in edata.get("relationships", {}).items()
+                },
+                dynamic_attributes=set(edata.get("dynamic_attributes", [])),
+            )
+            store.entities[eid] = entity
+
+        store.world_rules = [
+            WorldRule(rule=w["rule"], evidence=[ClipRef(**r) for r in w.get("evidence", [])])
+            for w in data.get("world_rules", [])
+        ]
+        store.events = [
+            Event(
+                clip_ref=ClipRef(**e["clip_ref"]),
+                entity_ids=e.get("entity_ids", []),
+                summary=e.get("summary", ""),
+            )
+            for e in data.get("events", [])
+        ]
+        store.clip_sequence = list(data.get("clip_sequence", []))
+        return store
+
+    @classmethod
+    def from_json(cls, text: str) -> "MemoryStore":
+        return cls.from_dict(json.loads(text))
+
+    @classmethod
+    def load(cls, path: str | Path) -> "MemoryStore":
+        return cls.from_json(Path(path).read_text(encoding="utf-8"))
+
+
+def _deviation_from_dict(d: dict) -> Deviation:
+    return Deviation(
+        attribute=d["attribute"],
+        observed_value=d["observed_value"],
+        canonical_value=d["canonical_value"],
+        clip_ref=ClipRef(**d["clip_ref"]),
+        classification=d["classification"],
+        reasoning=d.get("reasoning", ""),
+        active_until=d.get("active_until"),
+        confidence=d.get("confidence"),
+    )
