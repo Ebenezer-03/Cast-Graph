@@ -120,6 +120,14 @@ class MemoryStore:
         self.entities: dict[str, Entity] = {}
         self.world_rules: list[WorldRule] = []
         self.events: list[Event] = []
+        # Chronological (by processing order) list of clip ids seen so far.
+        # Phase 6: gives every clip a stable sequence index for temporal
+        # reconstruction, without requiring callers to track it themselves.
+        self.clip_sequence: list[str] = []
+
+    def _note_clip(self, clip_id: str) -> None:
+        if clip_id not in self.clip_sequence:
+            self.clip_sequence.append(clip_id)
 
     def get_or_create(self, entity_id: str, name: str, entity_type: str = "character") -> Entity:
         if entity_id not in self.entities:
@@ -130,6 +138,7 @@ class MemoryStore:
         """First-time recording of a canonical attribute, or reinforcement of
         an existing one with matching evidence. Only called for attributes
         not in `dynamic_attributes` — see reconcile()."""
+        self._note_clip(clip_ref.clip_id)
         entity = self.entities[entity_id]
         if attribute in entity.canonical:
             entity.canonical[attribute].evidence.append(clip_ref)
@@ -144,6 +153,7 @@ class MemoryStore:
         PROMOTED_FROM_PREVIOUS, then makes new_value canonical. See
         docs/phases/PHASE_05.md subtask 11 -- promotion threshold/policy
         lives in castgraph/drift/reconcile.py, not here."""
+        self._note_clip(clip_ref.clip_id)
         entity = self.entities[entity_id]
         old = entity.canonical.get(attribute)
         if old is not None:
@@ -160,9 +170,11 @@ class MemoryStore:
         )
 
     def record_exception(self, entity_id: str, deviation: Deviation) -> None:
+        self._note_clip(deviation.clip_ref.clip_id)
         self.entities[entity_id].exceptions.append(deviation)
 
     def record_unexplained(self, entity_id: str, deviation: Deviation) -> None:
+        self._note_clip(deviation.clip_ref.clip_id)
         self.entities[entity_id].unexplained.append(deviation)
 
     def record_event(self, event: Event) -> None:
